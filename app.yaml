@@ -1,0 +1,4 @@
+command: ["uvicorn", "backend.main:app"]
+env:
+  - name: DB_INSTANCE_NAME
+    value: "genie-load-test"

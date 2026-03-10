@@ -1,0 +1,17 @@
+flowchart LR
+    classDef userNode fill:#3b82f6,stroke:#60a5fa,color:#fff,font-weight:bold,font-size:13px
+    classDef genieNode fill:#7c3aed,stroke:#a78bfa,color:#fff,font-weight:bold,font-size:14px
+    classDef metricNode fill:#059669,stroke:#34d399,color:#fff,font-weight:bold,font-size:13px
+
+    U1["👤 User 1"]:::userNode
+    U2["👤 User 2"]:::userNode
+    UN["👤 User N"]:::userNode
+
+    G["🧞 Genie API"]:::genieNode
+
+    M["📊 Metrics"]:::metricNode
+
+    U1 -->|request| G
+    U2 -->|request| G
+    UN -->|request| G
+    G -->|latency & throughput| M
