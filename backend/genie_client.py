@@ -13,11 +13,11 @@ DEFAULT_RETRY_BASE_DELAY = 2.0  # seconds, exponential backoff
 class GenieClient:
     """Client for Databricks Genie API using databricks-sdk auth."""
 
-    def __init__(self, max_retries=None, retry_base_delay=None):
+    def __init__(self, max_retries=None, retry_base_delay=None, poll_interval=None, max_poll_time=None):
         self.w = sdk.WorkspaceClient()
         self.base_url = f"{self.w.config.host}/api/2.0/genie/spaces"
-        self.poll_interval = 2.0
-        self.max_poll_time = 300
+        self.poll_interval = poll_interval if poll_interval is not None else 2.0
+        self.max_poll_time = max_poll_time if max_poll_time is not None else 300
         self.max_retries = max_retries if max_retries is not None else DEFAULT_MAX_RETRIES
         self.retry_base_delay = retry_base_delay if retry_base_delay is not None else DEFAULT_RETRY_BASE_DELAY
 
@@ -144,10 +144,24 @@ class GenieClient:
                             error = data.get("error", {}).get(
                                 "message", f"Message {status}"
                             )
+                        response_type = "unknown"
+                        if status == "COMPLETED":
+                            attachments = data.get("attachments", [])
+                            if any("query" in a.get("type", "") for a in attachments):
+                                response_type = "sql"
+                            else:
+                                content = data.get("content", "").lower()
+                                if any(w in content for w in ("don't", "cannot", "sorry", "unable")):
+                                    response_type = "refusal"
+                                elif content:
+                                    response_type = "clarification"
+                        else:
+                            response_type = "error"
                         return {
                             "completed_time": time.time(),
                             "status": status.lower(),
                             "error": error,
+                            "response_type": response_type,
                             "poll_retries": poll_retries,
                             "poll_backoff_ms": poll_backoff_ms,
                         }

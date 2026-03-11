@@ -19,6 +19,7 @@ export default function MetricCard({ label, value, unit = 'ms', color = 'blue', 
     purple: 'from-purple-500/20 to-purple-600/5 border-purple-500/30',
     cyan: 'from-cyan-500/20 to-cyan-600/5 border-cyan-500/30',
     orange: 'from-orange-500/20 to-orange-600/5 border-orange-500/30',
+    gray: 'from-gray-500/20 to-gray-600/5 border-gray-500/30',
   };
 
   const textColors = {
@@ -29,6 +30,7 @@ export default function MetricCard({ label, value, unit = 'ms', color = 'blue', 
     purple: 'text-purple-400',
     cyan: 'text-cyan-400',
     orange: 'text-orange-400',
+    gray: 'text-gray-400',
   };
 
   if (dualTime) {

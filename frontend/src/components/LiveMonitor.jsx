@@ -8,12 +8,13 @@ import ThroughputPanel from './ThroughputPanel';
 import ErrorAnalysis from './ErrorAnalysis';
 import PerUserTable from './PerUserTable';
 import PerQuestionTable from './PerQuestionTable';
+import ConcurrencyCurve from './ConcurrencyCurve';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { fmt, fmtTooltip, fmtAxis } from '../utils/format';
 
-export default function LiveMonitor({ runId, onComplete }) {
+export default function LiveMonitor({ runId, spaceId, onComplete }) {
   const [progress, setProgress] = useState(null);
   const [liveLatencies, setLiveLatencies] = useState([]);
   const [finalResults, setFinalResults] = useState(null);
@@ -95,6 +96,11 @@ export default function LiveMonitor({ runId, onComplete }) {
               {status}
             </span>
             <span className="text-xs text-gray-500 font-mono">{runId?.slice(0, 8)}</span>
+            {spaceId && (
+              <span className="text-xs text-gray-500">
+                Space <span className="font-mono">{spaceId.slice(0, 12)}</span>
+              </span>
+            )}
           </div>
           {isRunning && (
             <button
@@ -172,14 +178,17 @@ export default function LiveMonitor({ runId, onComplete }) {
           {/* Overview tab */}
           {activeTab === 'overview' && (
             <>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <MetricCard label="Avg Latency" value={finalResults.overall?.avg_ms} dualTime color="blue" />
-                <MetricCard label="P50" value={finalResults.overall?.p50} dualTime color="purple" />
-                <MetricCard label="P90" value={finalResults.overall?.p90} dualTime color="yellow" />
-                <MetricCard label="P99" value={finalResults.overall?.p99} dualTime color="red" />
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+                <MetricCard label="Avg Latency" value={finalResults.overall?.avg_ms} dualTime color="blue" subtitle="Mean end-to-end response time" />
+                <MetricCard label="Stddev" value={finalResults.overall?.stddev_ms} dualTime color="gray" subtitle="Lower = more consistent performance" />
+                <MetricCard label="P50" value={finalResults.overall?.p50} dualTime color="purple" subtitle="Half of requests faster than this" />
+                <MetricCard label="P90" value={finalResults.overall?.p90} dualTime color="yellow" subtitle="90% of requests faster than this" />
+                <MetricCard label="P99" value={finalResults.overall?.p99} dualTime color="red" subtitle="Worst-case excluding outliers" />
               </div>
 
               <ThroughputPanel throughput={finalResults.throughput} />
+
+              <ConcurrencyCurve data={finalResults.concurrency_curve} title="Latency Over Time (10s buckets)" subtitle="How latency changes as the test progresses" />
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <PercentileChart data={finalResults.overall} title="Overall Latency Percentiles" />

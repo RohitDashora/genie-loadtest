@@ -122,6 +122,11 @@ def init_db():
                 ALTER TABLE test_requests ADD COLUMN IF NOT EXISTS polling_ms FLOAT;
                 ALTER TABLE test_requests ADD COLUMN IF NOT EXISTS retry_count INT DEFAULT 0;
                 ALTER TABLE test_requests ADD COLUMN IF NOT EXISTS backoff_time_ms FLOAT DEFAULT 0;
+                ALTER TABLE test_requests ADD COLUMN IF NOT EXISTS response_type TEXT;
+                ALTER TABLE test_runs ADD COLUMN IF NOT EXISTS max_retries INT DEFAULT 5;
+                ALTER TABLE test_runs ADD COLUMN IF NOT EXISTS retry_base_delay FLOAT DEFAULT 2.0;
+                ALTER TABLE test_runs ADD COLUMN IF NOT EXISTS poll_interval_sec FLOAT DEFAULT 2.0;
+                ALTER TABLE test_runs ADD COLUMN IF NOT EXISTS max_poll_time_sec FLOAT DEFAULT 300;
             """)
         conn.commit()
     logger.info("Database schema initialized")

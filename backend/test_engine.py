@@ -9,14 +9,33 @@ from backend.db import get_cursor, get_db
 from backend.genie_client import GenieClient
 
 
+STALE_RUN_TTL = 300  # seconds — evict completed runs after 5 min as safety net
+
+
 class TestEngine:
     """Manages load test execution with virtual users."""
 
     def __init__(self):
         self.active_runs: dict[str, dict] = {}
+        self._completed_at: dict[str, float] = {}
 
     def get_run_status(self, run_id: str) -> Optional[dict]:
         return self.active_runs.get(run_id)
+
+    def cleanup_run(self, run_id: str):
+        """Remove a completed run from in-memory tracking."""
+        self.active_runs.pop(run_id, None)
+        self._completed_at.pop(run_id, None)
+
+    def _sweep_stale_runs(self):
+        """Evict runs that completed more than STALE_RUN_TTL seconds ago."""
+        now = time.time()
+        stale = [
+            rid for rid, t in self._completed_at.items()
+            if now - t > STALE_RUN_TTL
+        ]
+        for rid in stale:
+            self.cleanup_run(rid)
 
     async def start_test(
         self,
@@ -28,9 +47,12 @@ class TestEngine:
         think_time_max: float,
         max_retries: int = 5,
         retry_base_delay: float = 2.0,
+        poll_interval: float = 2.0,
+        max_poll_time: float = 300,
     ):
         """Launch a load test with N virtual users."""
-        genie = GenieClient(max_retries=max_retries, retry_base_delay=retry_base_delay)
+        self._sweep_stale_runs()
+        genie = GenieClient(max_retries=max_retries, retry_base_delay=retry_base_delay, poll_interval=poll_interval, max_poll_time=max_poll_time)
         questions = self._load_questions(genie_space_id)
         if not questions:
             self._update_run_status(run_id, "failed")
@@ -73,6 +95,7 @@ class TestEngine:
         if run_state.get("status") != "cancelled":
             run_state["status"] = "completed"
             self._update_run_status(run_id, "completed")
+        self._completed_at[run_id] = time.time()
 
     async def _run_virtual_user(
         self,
@@ -130,6 +153,7 @@ class TestEngine:
                         ttfr_ms=None, polling_ms=None,
                         status="error", error_message=error, http_status_code=None,
                         retry_count=0, backoff_time_ms=0,
+                        response_type="error",
                     )
                     run_state["completed"] += 1
                     run_state["failed"] += 1
@@ -154,6 +178,7 @@ class TestEngine:
                 status = result.get("status", "error")
                 error = result.get("error")
                 http_status = result.get("http_status")
+                response_type = result.get("response_type")
                 first_response_at = datetime.fromtimestamp(
                     result["first_response_time"], tz=timezone.utc
                 )
@@ -170,6 +195,7 @@ class TestEngine:
                 status = "error"
                 error = str(e)[:500]
                 http_status = None
+                response_type = "error"
                 first_response_at = None
                 completed_at = datetime.now(timezone.utc)
                 request_type = "start_conversation" if i == 0 else "create_message"
@@ -192,6 +218,7 @@ class TestEngine:
                 http_status_code=http_status,
                 retry_count=retry_count,
                 backoff_time_ms=backoff_time_ms,
+                response_type=response_type,
             )
 
             is_success = status == "completed"
@@ -234,14 +261,14 @@ class TestEngine:
                     first_response_at, completed_at, latency_ms,
                     ttfr_ms, polling_ms,
                     status, error_message, http_status_code,
-                    retry_count, backoff_time_ms
+                    retry_count, backoff_time_ms, response_type
                 ) VALUES (
                     %(request_id)s, %(run_id)s, %(virtual_user_id)s, %(question)s,
                     %(conversation_id)s, %(request_type)s, %(started_at)s,
                     %(first_response_at)s, %(completed_at)s, %(latency_ms)s,
                     %(ttfr_ms)s, %(polling_ms)s,
                     %(status)s, %(error_message)s, %(http_status_code)s,
-                    %(retry_count)s, %(backoff_time_ms)s
+                    %(retry_count)s, %(backoff_time_ms)s, %(response_type)s
                 )
                 """,
                 kwargs,

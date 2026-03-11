@@ -84,15 +84,15 @@ export default function PerQuestionTable({ perQuestion }) {
             <tr>
               <th className="text-left p-2 w-8">#</th>
               <th className="text-left p-2">Question</th>
+              <th className="text-left p-2">Type</th>
               <SortHeader col="times_asked">Asked</SortHeader>
               <th className="text-right p-2">Ok/Fail</th>
               <SortHeader col="avg_latency_ms">Avg</SortHeader>
+              <SortHeader col="stddev_ms">Stddev</SortHeader>
               <SortHeader col="p50_ms">P50</SortHeader>
               <SortHeader col="p90_ms">P90</SortHeader>
               <th className="text-right p-2">TTFR</th>
               <th className="text-right p-2">Polling</th>
-              <th className="text-right p-2">Min</th>
-              <th className="text-right p-2">Max</th>
               <th className="text-right p-2">Retries</th>
             </tr>
           </thead>
@@ -102,8 +102,18 @@ export default function PerQuestionTable({ perQuestion }) {
               return (
                 <tr key={i} className={`border-t border-gray-800/50 hover:bg-gray-800/30 ${isHot ? 'bg-red-500/5' : ''}`}>
                   <td className="p-2 text-gray-500 font-mono">{i + 1}</td>
-                  <td className="p-2 max-w-[300px]">
+                  <td className="p-2 max-w-[250px]">
                     <span className="block truncate" title={q.question}>{q.question}</span>
+                  </td>
+                  <td className="p-2">
+                    {q.response_type && (
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        q.response_type === 'sql' ? 'bg-emerald-500/20 text-emerald-400' :
+                        q.response_type === 'clarification' ? 'bg-yellow-500/20 text-yellow-400' :
+                        q.response_type === 'refusal' ? 'bg-red-500/20 text-red-400' :
+                        'bg-gray-500/20 text-gray-400'
+                      }`}>{q.response_type}</span>
+                    )}
                   </td>
                   <td className="p-2 text-right font-mono">{q.times_asked}</td>
                   <td className="p-2 text-right font-mono">
@@ -113,12 +123,11 @@ export default function PerQuestionTable({ perQuestion }) {
                   <td className="p-2 text-right font-mono font-bold">
                     <span className={isHot ? 'text-red-400' : 'text-white'}>{fmtDual(q.avg_latency_ms)}</span>
                   </td>
+                  <td className="p-2 text-right font-mono text-gray-500">{fmt(q.stddev_ms)}</td>
                   <td className="p-2 text-right font-mono">{fmt(q.p50_ms)}</td>
                   <td className="p-2 text-right font-mono">{fmt(q.p90_ms)}</td>
                   <td className="p-2 text-right font-mono text-cyan-400">{fmt(q.avg_ttfr_ms)}</td>
                   <td className="p-2 text-right font-mono text-amber-400">{fmt(q.avg_polling_ms)}</td>
-                  <td className="p-2 text-right font-mono text-gray-500">{fmt(q.min_ms)}</td>
-                  <td className="p-2 text-right font-mono text-gray-500">{fmt(q.max_ms)}</td>
                   <td className="p-2 text-right font-mono">{q.total_retries > 0 ? q.total_retries : ''}</td>
                 </tr>
               );

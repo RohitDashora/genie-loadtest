@@ -75,14 +75,17 @@ Single-page app built with Vite, Tailwind CSS, and Recharts. Served as static fi
 | `ErrorAnalysis.jsx` | Pie chart + table of status distribution |
 | `PerUserTable.jsx` | Per virtual user performance breakdown |
 | `PerQuestionTable.jsx` | Per question latency (for instruction tuning) |
-| `CompareChart.jsx` | Side-by-side percentile comparison of multiple runs |
+| `CompareChart.jsx` | Config comparison table + side-by-side percentile chart |
+| `ConcurrencyCurve.jsx` | Area chart of Avg/P50/P90 latency over 10-second time buckets |
+| `HelpTip.jsx` | Reusable hover tooltip for config field explanations |
 
 ### Backend (FastAPI)
 
 #### `main.py` — API Routes
 
-- **Test lifecycle:** Start, cancel, stream progress (SSE), list runs, get results, compare runs
+- **Test lifecycle:** Start, cancel, delete, stream progress (SSE), list runs, get results, compare runs
 - **Question bank:** CRUD operations for managing test questions per Genie Space
+- **Run deletion:** `DELETE /api/test/{run_id}` with cascading cleanup of test_requests
 - **Static serving:** Serves the built React app, with SPA fallback routing
 
 #### `test_engine.py` — Virtual User Orchestration
@@ -111,8 +114,9 @@ Handles communication with the Databricks Genie API:
 - **Retry strategy:** Configurable exponential backoff on HTTP 429 (rate limited)
   - Formula: `base_delay * (2 ^ attempt)` (ignores server Retry-After header)
   - Default: 2s, 4s, 8s, 16s, 32s
-- **Polling:** Checks message status every 2s, times out after 300s
-- **Metrics tracked:** start_time, first_response_time, completed_time, retry_count, backoff_time_ms
+- **Polling:** Configurable poll interval (default 2s) and timeout (default 300s), both tunable per-run via the UI
+- **Response type detection:** Classifies Genie responses as `sql` (query attachment), `clarification` (text response), `refusal` (sorry/cannot), or `error`
+- **Metrics tracked:** start_time, first_response_time, completed_time, retry_count, backoff_time_ms, response_type
 
 #### `db.py` — Database Layer
 
@@ -135,6 +139,10 @@ erDiagram
         int questions_per_user
         float think_time_min_sec
         float think_time_max_sec
+        int max_retries
+        float retry_base_delay
+        float poll_interval_sec
+        float max_poll_time_sec
         timestamp started_at
         timestamp completed_at
         text status
@@ -161,6 +169,7 @@ erDiagram
         int http_status_code
         int retry_count
         float backoff_time_ms
+        text response_type
     }
 
     question_bank {
@@ -180,6 +189,10 @@ erDiagram
 | questions_per_user | INT | Questions per user |
 | think_time_min_sec | FLOAT | Min think time |
 | think_time_max_sec | FLOAT | Max think time |
+| max_retries | INT | Max retry attempts on 429 |
+| retry_base_delay | FLOAT | Exponential backoff base (seconds) |
+| poll_interval_sec | FLOAT | Polling frequency (seconds) |
+| max_poll_time_sec | FLOAT | Max wait time per question (seconds) |
 | started_at | TIMESTAMP | Run start time |
 | completed_at | TIMESTAMP | Run completion time |
 | status | TEXT | running / completed / failed / cancelled |
@@ -207,6 +220,7 @@ erDiagram
 | http_status_code | INT | HTTP status from Genie API |
 | retry_count | INT | Number of 429 retries |
 | backoff_time_ms | FLOAT | Total time spent in backoff |
+| response_type | TEXT | Genie response classification: sql / clarification / refusal / error / unknown |
 
 #### `question_bank`
 | Column | Type | Description |
@@ -271,11 +285,57 @@ sequenceDiagram
     end
     Note over API,Engine: Test completes
     API-->>Frontend: SSE event: done
+    Note over API,Engine: Run evicted from memory
     Frontend->>API: GET /api/test/{run_id}/results
     API->>DB: Aggregate queries (percentiles, breakdown, errors, per-user, per-question)
     DB-->>API: Result sets
     API-->>Frontend: Full results JSON
 ```
+
+### SSE Event Protocol
+
+The `/api/test/{run_id}/stream` endpoint uses [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events). The frontend connects via `EventSource` and listens for three named event types:
+
+#### `progress` event (emitted ~1/second while the test is running)
+
+```json
+{
+  "status": "running",
+  "total": 50,
+  "completed": 23,
+  "successful": 21,
+  "failed": 2,
+  "new_results": [
+    {
+      "request_id": "uuid",
+      "user_id": 3,
+      "question": "What is total revenue by region?",
+      "request_type": "create_message",
+      "latency_ms": 8432.1,
+      "status": "completed",
+      "timestamp": "2025-01-15T10:23:45.123Z"
+    }
+  ]
+}
+```
+
+`new_results` contains only the requests completed since the last event (delta, not cumulative). The frontend appends these to its live latency chart.
+
+#### `done` event (emitted once when the test reaches a terminal state)
+
+```json
+{ "status": "completed" }
+```
+
+Status is one of `completed`, `failed`, or `cancelled`. After receiving this event, the frontend closes the `EventSource` and fetches full aggregated results via `GET /api/test/{run_id}/results`.
+
+#### `error` event (emitted if the run ID is not found)
+
+```json
+{ "error": "Run not found" }
+```
+
+This can occur if the SSE connection is opened after the run has already been evicted from in-memory tracking and the DB lookup confirms it's in a terminal state (in which case a `done` event is sent instead).
 
 ## Deployment
 
@@ -306,6 +366,45 @@ The app is deployed via a shell script (`deploy.sh`) that handles the build-uplo
 
 The Lakebase database is provisioned separately and bound to the app as a resource, which auto-populates all PG connection environment variables (`PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGSSLMODE`, `PGAPPNAME`) in the app runtime.
 
+## How Metrics Are Calculated
+
+### Timing Breakdown
+
+Each request records three timestamps: `started_at`, `first_response_at`, and `completed_at`. Metrics are derived as follows:
+
+```
+                    started_at          first_response_at           completed_at
+                        │                       │                        │
+  start_conversation ── ├── HTTP POST ──────────┤── poll GET (2s loop) ──┤
+  or create_message     │                       │                        │
+                        │◄──── TTFR (ms) ──────►│◄──── Polling (ms) ────►│
+                        │                                                │
+                        │◄──────────── Latency (ms) ────────────────────►│
+```
+
+- **TTFR** = `first_response_at - started_at` — time for the Genie API to accept the request and return a conversation/message ID.
+- **Polling** = `completed_at - first_response_at` — time spent polling the message endpoint until it reaches a terminal state (`COMPLETED`, `FAILED`, `CANCELLED`, `EXPIRED`).
+- **Latency** = `completed_at - started_at` = TTFR + Polling. This is the total end-to-end time the virtual user waited.
+- **Backoff time** is tracked separately and is **not** included in latency. A request with 10s of 429 backoff and 5s of actual work shows `latency_ms = 5000`, `backoff_time_ms = 10000`.
+
+### Percentile Calculations
+
+Percentiles are computed server-side via Postgres `PERCENTILE_CONT()`:
+
+```sql
+PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY latency_ms)
+```
+
+- **Scope:** All requests with non-null `latency_ms` for the given run — this includes both successful and failed requests. Failed requests that consumed real time represent genuine load on the system.
+- **Exclusions:** Only requests where `latency_ms IS NULL` are excluded (e.g., skipped requests when `start_conversation` failed and remaining questions were abandoned with `latency_ms = 0`, which is included).
+- **Breakdown by type:** Percentiles are also computed separately for `start_conversation` and `create_message` request types, since `start_conversation` typically has higher latency (cold-starts a new Genie session).
+
+### Throughput
+
+- **Requests per minute** = `total_requests / (duration_sec / 60)`
+- **Duration** = `MAX(completed_at) - MIN(started_at)` across all requests in the run
+- **Success rate** = `successful / total_requests`
+
 ## Key Design Decisions
 
 1. **Exponential backoff (not server Retry-After):** Genie returns `Retry-After: 60` which is too conservative for load testing. We use our own `base_delay * 2^attempt` so backoff is configurable per run and allows faster recovery.
@@ -314,8 +413,12 @@ The Lakebase database is provisioned separately and bound to the app as a resour
 
 3. **Staggered user starts:** Virtual users are launched with 0.5-2s jitter to avoid a thundering herd on the first request wave.
 
-4. **In-memory + DB recording:** Test progress is tracked in-memory (for fast SSE streaming) and simultaneously written to Lakebase per-request (for durable analytics). Final aggregations use SQL percentile functions.
+4. **In-memory + DB recording:** Test progress is tracked in-memory (for fast SSE streaming) and simultaneously written to Lakebase per-request (for durable analytics). Completed runs are evicted from memory after the SSE stream ends, with a 5-minute TTL safety net for abandoned connections (e.g., browser tab closed mid-test). Final aggregations use SQL percentile functions.
 
 5. **OAuth token refresh per connection:** The psycopg `OAuthConnection` subclass generates a fresh token for each new pool connection, handling the 1-hour token expiry automatically.
 
 6. **Per-question metrics:** Surfaces which specific questions are slow, enabling targeted Genie instruction tuning rather than blind optimization.
+
+7. **Configurable polling per-run:** Poll interval and timeout are stored with each test run, allowing users to tune responsiveness vs API load. Lower poll intervals detect completion faster but generate more GET requests. All config is persisted to Lakebase so historical runs retain their full configuration for comparison.
+
+8. **Response type classification:** The Genie poll response is inspected for attachments (query = SQL) and content keywords (sorry/cannot = refusal) to classify each response, surfacing not just "which questions are slow" but "which questions are slow AND wrong."

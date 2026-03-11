@@ -13,6 +13,9 @@ __pycache__/
 # Databricks
 .databricks/
 
+# Cursor
+.cursor/
+
 # IDE
 .vscode/
 .idea/

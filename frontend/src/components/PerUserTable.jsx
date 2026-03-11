@@ -19,7 +19,8 @@ export default function PerUserTable({ perUser }) {
 
   return (
     <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-5">
-      <h3 className="text-sm font-semibold text-gray-300 mb-2">Per-User Metrics</h3>
+      <h3 className="text-sm font-semibold text-gray-300 mb-1">Per-User Metrics</h3>
+      <p className="text-xs text-gray-500 mb-2">Check for outlier users hitting rate limits</p>
       <div className="flex gap-4 text-xs text-gray-500 mb-4">
         <span>Fastest: <span className="text-emerald-400 font-mono">User {fastest?.virtual_user_id}</span> ({fmt(fastest?.avg_latency_ms)})</span>
         <span>Slowest: <span className="text-red-400 font-mono">User {slowest?.virtual_user_id}</span> ({fmt(slowest?.avg_latency_ms)})</span>

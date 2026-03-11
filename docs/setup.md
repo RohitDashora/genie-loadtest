@@ -189,3 +189,16 @@ The deploy script detects this automatically. Wait for the current deployment to
 ```bash
 databricks apps get my-genie-tester --profile my-profile
 ```
+
+### "must be owner of table test_requests"
+This happens when the tables were created by a different service principal (e.g., you recreated the app or bound a different Lakebase instance). The app needs table ownership to run schema migrations. Transfer ownership:
+```sql
+ALTER TABLE test_runs OWNER TO "<service-principal-id>";
+ALTER TABLE test_requests OWNER TO "<service-principal-id>";
+ALTER TABLE question_bank OWNER TO "<service-principal-id>";
+```
+Find the service principal ID:
+```bash
+databricks apps get my-genie-tester --profile my-profile
+# Look for: service_principal_client_id
+```

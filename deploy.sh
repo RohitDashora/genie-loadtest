@@ -76,6 +76,7 @@ echo ""
 echo "==> Building frontend..."
 cd "$SCRIPT_DIR/frontend"
 npm install --silent 2>&1 | tail -1
+rm -rf node_modules/.vite ../backend/static
 npm run build 2>&1
 cd "$SCRIPT_DIR"
 echo ""

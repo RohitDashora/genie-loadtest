@@ -58,6 +58,10 @@ export async function deleteQuestion(id) {
   await fetch(`${BASE}/questions/${id}`, { method: 'DELETE' });
 }
 
+export async function deleteRun(runId) {
+  await fetch(`${BASE}/test/${runId}`, { method: 'DELETE' });
+}
+
 export function streamTest(runId, onProgress, onDone, onError) {
   const es = new EventSource(`${BASE}/test/${runId}/stream`);
   es.addEventListener('progress', (e) => onProgress(JSON.parse(e.data)));

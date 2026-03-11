@@ -46,6 +46,8 @@ class StartTestRequest(BaseModel):
     think_time_max_sec: float = 10.0
     max_retries: int = 5
     retry_base_delay: float = 2.0
+    poll_interval_sec: float = 2.0
+    max_poll_time_sec: float = 300
 
 
 class QuestionCreate(BaseModel):
@@ -74,8 +76,10 @@ async def start_test(req: StartTestRequest):
             """
             INSERT INTO test_runs (
                 run_id, genie_space_id, num_users, questions_per_user,
-                think_time_min_sec, think_time_max_sec, status
-            ) VALUES (%s, %s, %s, %s, %s, %s, 'running')
+                think_time_min_sec, think_time_max_sec,
+                max_retries, retry_base_delay,
+                poll_interval_sec, max_poll_time_sec, status
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'running')
             """,
             (
                 run_id,
@@ -84,6 +88,10 @@ async def start_test(req: StartTestRequest):
                 req.questions_per_user,
                 req.think_time_min_sec,
                 req.think_time_max_sec,
+                req.max_retries,
+                req.retry_base_delay,
+                req.poll_interval_sec,
+                req.max_poll_time_sec,
             ),
         )
         conn.commit()
@@ -98,6 +106,8 @@ async def start_test(req: StartTestRequest):
             think_time_max=req.think_time_max_sec,
             max_retries=req.max_retries,
             retry_base_delay=req.retry_base_delay,
+            poll_interval=req.poll_interval_sec,
+            max_poll_time=req.max_poll_time_sec,
         )
     )
 
@@ -156,6 +166,7 @@ async def stream_test_status(run_id: str):
                     "event": "done",
                     "data": json.dumps({"status": run_state["status"]}),
                 }
+                engine.cleanup_run(run_id)
                 return
 
             await asyncio.sleep(1)
@@ -170,6 +181,8 @@ def list_runs(limit: int = 20):
             """
             SELECT run_id, genie_space_id, num_users, questions_per_user,
                    think_time_min_sec, think_time_max_sec,
+                   max_retries, retry_base_delay,
+                   poll_interval_sec, max_poll_time_sec,
                    started_at, completed_at, status,
                    total_requests, successful_requests, failed_requests
             FROM test_runs
@@ -201,6 +214,7 @@ def get_run_results(run_id: str):
                 COUNT(*) FILTER (WHERE status = 'completed') as successful,
                 COUNT(*) FILTER (WHERE status != 'completed') as failed,
                 ROUND(AVG(latency_ms)::numeric, 1) as avg_ms,
+                ROUND(STDDEV(latency_ms)::numeric, 1) as stddev_ms,
                 ROUND(PERCENTILE_CONT(0.30) WITHIN GROUP (ORDER BY latency_ms)::numeric, 1) as p30,
                 ROUND(PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY latency_ms)::numeric, 1) as p50,
                 ROUND(PERCENTILE_CONT(0.60) WITHIN GROUP (ORDER BY latency_ms)::numeric, 1) as p60,
@@ -224,6 +238,7 @@ def get_run_results(run_id: str):
                 COUNT(*) FILTER (WHERE status = 'completed') as successful,
                 COUNT(*) FILTER (WHERE status != 'completed') as failed,
                 ROUND(AVG(latency_ms)::numeric, 1) as avg_ms,
+                ROUND(STDDEV(latency_ms)::numeric, 1) as stddev_ms,
                 ROUND(PERCENTILE_CONT(0.30) WITHIN GROUP (ORDER BY latency_ms)::numeric, 1) as p30,
                 ROUND(PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY latency_ms)::numeric, 1) as p50,
                 ROUND(PERCENTILE_CONT(0.60) WITHIN GROUP (ORDER BY latency_ms)::numeric, 1) as p60,
@@ -244,7 +259,7 @@ def get_run_results(run_id: str):
             SELECT request_id, virtual_user_id, question, conversation_id,
                    request_type, started_at, first_response_at, completed_at,
                    latency_ms, ttfr_ms, polling_ms, status, error_message,
-                   http_status_code, retry_count, backoff_time_ms
+                   http_status_code, retry_count, backoff_time_ms, response_type
             FROM test_requests
             WHERE run_id = %s
             ORDER BY started_at
@@ -344,13 +359,15 @@ def get_run_results(run_id: str):
                 COUNT(*) FILTER (WHERE status = 'completed') as successful,
                 COUNT(*) FILTER (WHERE status != 'completed') as failed,
                 ROUND(AVG(latency_ms)::numeric, 1) as avg_latency_ms,
+                ROUND(STDDEV(latency_ms)::numeric, 1) as stddev_ms,
                 ROUND(PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY latency_ms)::numeric, 1) as p50_ms,
                 ROUND(PERCENTILE_CONT(0.90) WITHIN GROUP (ORDER BY latency_ms)::numeric, 1) as p90_ms,
                 ROUND(MIN(latency_ms)::numeric, 1) as min_ms,
                 ROUND(MAX(latency_ms)::numeric, 1) as max_ms,
                 ROUND(AVG(ttfr_ms)::numeric, 1) as avg_ttfr_ms,
                 ROUND(AVG(polling_ms)::numeric, 1) as avg_polling_ms,
-                SUM(COALESCE(retry_count, 0)) as total_retries
+                SUM(COALESCE(retry_count, 0)) as total_retries,
+                MODE() WITHIN GROUP (ORDER BY response_type) as response_type
             FROM test_requests
             WHERE run_id = %s AND latency_ms IS NOT NULL
             GROUP BY question
@@ -359,6 +376,24 @@ def get_run_results(run_id: str):
             (run_id,),
         )
         per_question = [_serialize_row(r) for r in cur.fetchall()]
+
+        cur.execute(
+            """
+            SELECT
+                (EXTRACT(EPOCH FROM (started_at - (SELECT MIN(started_at) FROM test_requests WHERE run_id = %s))) / 10)::int * 10 as time_bucket_sec,
+                COUNT(*) as requests,
+                COUNT(*) FILTER (WHERE status = 'completed') as successful,
+                ROUND(AVG(latency_ms)::numeric, 1) as avg_latency_ms,
+                ROUND(PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY latency_ms)::numeric, 1) as p50_ms,
+                ROUND(PERCENTILE_CONT(0.90) WITHIN GROUP (ORDER BY latency_ms)::numeric, 1) as p90_ms
+            FROM test_requests
+            WHERE run_id = %s AND latency_ms IS NOT NULL
+            GROUP BY time_bucket_sec
+            ORDER BY time_bucket_sec
+            """,
+            (run_id, run_id),
+        )
+        concurrency_curve = [_serialize_row(r) for r in cur.fetchall()]
 
         return {
             "run": _serialize_row(run),
@@ -369,6 +404,7 @@ def get_run_results(run_id: str):
             "error_breakdown": error_breakdown,
             "per_user": per_user,
             "per_question": per_question,
+            "concurrency_curve": concurrency_curve,
             "requests": requests,
         }
 
@@ -384,7 +420,7 @@ def compare_runs(run_ids: str = Query(..., description="Comma-separated run IDs"
     for run_id in ids:
         with get_cursor() as cur:
             cur.execute(
-                "SELECT run_id, genie_space_id, num_users, questions_per_user, started_at FROM test_runs WHERE run_id = %s",
+                "SELECT run_id, genie_space_id, num_users, questions_per_user, think_time_min_sec, think_time_max_sec, max_retries, retry_base_delay, poll_interval_sec, max_poll_time_sec, started_at FROM test_runs WHERE run_id = %s",
                 (run_id,),
             )
             run = cur.fetchone()
@@ -416,6 +452,14 @@ def compare_runs(run_ids: str = Query(..., description="Comma-separated run IDs"
             })
 
     return results
+
+
+@app.delete("/api/test/{run_id}")
+def delete_run(run_id: str):
+    with get_db() as conn:
+        conn.execute("DELETE FROM test_runs WHERE run_id = %s", (run_id,))
+        conn.commit()
+    return {"status": "deleted"}
 
 
 # --- Question Bank ---

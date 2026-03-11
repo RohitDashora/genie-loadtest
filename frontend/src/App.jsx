@@ -4,6 +4,7 @@ import QuestionBank from './components/QuestionBank';
 import LiveMonitor from './components/LiveMonitor';
 import RunHistory from './components/RunHistory';
 import { Zap, History, MessageSquare, Play, Settings } from 'lucide-react';
+import HelpTip from './components/HelpTip';
 
 const TABS = [
   { id: 'test', label: 'Load Test', icon: Zap },
@@ -19,6 +20,8 @@ export default function App() {
   const [thinkTimeMax, setThinkTimeMax] = useState(10);
   const [maxRetries, setMaxRetries] = useState(5);
   const [retryBaseDelay, setRetryBaseDelay] = useState(2);
+  const [pollInterval, setPollInterval] = useState(2);
+  const [maxPollTime, setMaxPollTime] = useState(300);
   const [activeRunId, setActiveRunId] = useState(null);
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState(null);
@@ -38,6 +41,8 @@ export default function App() {
         think_time_max_sec: thinkTimeMax,
         max_retries: maxRetries,
         retry_base_delay: retryBaseDelay,
+        poll_interval_sec: pollInterval,
+        max_poll_time_sec: maxPollTime,
       });
       setActiveRunId(run_id);
       setIsRunning(true);
@@ -89,7 +94,7 @@ export default function App() {
                 </h2>
                 <div className="space-y-4">
                   <div>
-                    <label className="text-xs text-gray-500 block mb-1">Genie Space ID</label>
+                    <label className="text-xs text-gray-500 block mb-1">Genie Space ID <HelpTip text="The ID from your Genie Space URL or settings page" /></label>
                     <input
                       type="text"
                       value={spaceId}
@@ -101,7 +106,7 @@ export default function App() {
 
                   <div>
                     <label className="text-xs text-gray-500 block mb-1">
-                      Virtual Users: <span className="text-blue-400 font-bold">{numUsers}</span>
+                      Virtual Users: <span className="text-blue-400 font-bold">{numUsers}</span> <HelpTip text="Number of concurrent simulated users sending questions in parallel" />
                     </label>
                     <input
                       type="range"
@@ -118,7 +123,7 @@ export default function App() {
 
                   <div>
                     <label className="text-xs text-gray-500 block mb-1">
-                      Questions per User: <span className="text-blue-400 font-bold">{questionsPerUser}</span>
+                      Questions per User: <span className="text-blue-400 font-bold">{questionsPerUser}</span> <HelpTip text="How many questions each virtual user sends sequentially in one conversation" />
                     </label>
                     <input
                       type="range"
@@ -132,7 +137,7 @@ export default function App() {
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs text-gray-500 block mb-1">Think Time Min (s)</label>
+                      <label className="text-xs text-gray-500 block mb-1">Think Time Min (s) <HelpTip text="Minimum random pause between questions to simulate real user reading time" /></label>
                       <input
                         type="number"
                         min={0}
@@ -144,7 +149,7 @@ export default function App() {
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-gray-500 block mb-1">Think Time Max (s)</label>
+                      <label className="text-xs text-gray-500 block mb-1">Think Time Max (s) <HelpTip text="Maximum random pause between questions to simulate real user reading time" /></label>
                       <input
                         type="number"
                         min={0}
@@ -160,7 +165,7 @@ export default function App() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs text-gray-500 block mb-1">
-                        Max Retries: <span className="text-blue-400 font-bold">{maxRetries}</span>
+                        Max Retries: <span className="text-blue-400 font-bold">{maxRetries}</span> <HelpTip text="How many times to retry on HTTP 429 rate limit errors before giving up" />
                       </label>
                       <input
                         type="range"
@@ -175,7 +180,7 @@ export default function App() {
                       </div>
                     </div>
                     <div>
-                      <label className="text-xs text-gray-500 block mb-1">Base Delay (s)</label>
+                      <label className="text-xs text-gray-500 block mb-1">Base Delay (s) <HelpTip text="Starting backoff delay for retries; doubles each attempt (exponential backoff)" /></label>
                       <input
                         type="number"
                         min={0.5}
@@ -188,6 +193,33 @@ export default function App() {
                       <div className="text-[10px] text-gray-500 mt-1">
                         Delays: {Array.from({length: maxRetries}, (_, i) => `${retryBaseDelay * (2 ** i)}s`).join(', ') || 'none'}
                       </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-gray-500 block mb-1">Poll Interval (s) <HelpTip text="How often to check if Genie has finished answering (lower = more API calls)" /></label>
+                      <input
+                        type="number"
+                        min={0.5}
+                        max={10}
+                        step={0.5}
+                        value={pollInterval}
+                        onChange={e => setPollInterval(Number(e.target.value))}
+                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 block mb-1">Poll Timeout (s) <HelpTip text="Maximum time to wait for a single answer before marking it as timeout" /></label>
+                      <input
+                        type="number"
+                        min={30}
+                        max={600}
+                        step={30}
+                        value={maxPollTime}
+                        onChange={e => setMaxPollTime(Number(e.target.value))}
+                        className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                      />
                     </div>
                   </div>
 
@@ -226,6 +258,7 @@ export default function App() {
               {activeRunId ? (
                 <LiveMonitor
                   runId={activeRunId}
+                  spaceId={spaceId}
                   onComplete={() => setIsRunning(false)}
                 />
               ) : (
