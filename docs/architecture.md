@@ -61,6 +61,8 @@ flowchart LR
 
 Single-page app built with Vite, Tailwind CSS, and Recharts. Served as static files by FastAPI.
 
+![App overview — metrics, throughput, and concurrency curve](images/overview.png)
+
 | Component | Purpose |
 |-----------|---------|
 | `App.jsx` | Main layout, test configuration panel, tab navigation |
@@ -372,14 +374,23 @@ The Lakebase database is provisioned separately and bound to the app as a resour
 
 Each request records three timestamps: `started_at`, `first_response_at`, and `completed_at`. Metrics are derived as follows:
 
-```
-                    started_at          first_response_at           completed_at
-                        │                       │                        │
-  start_conversation ── ├── HTTP POST ──────────┤── poll GET (2s loop) ──┤
-  or create_message     │                       │                        │
-                        │◄──── TTFR (ms) ──────►│◄──── Polling (ms) ────►│
-                        │                                                │
-                        │◄──────────── Latency (ms) ────────────────────►│
+```mermaid
+sequenceDiagram
+    participant App as Virtual User
+    participant API as Genie API
+
+    Note over App: started_at
+    App->>API: POST start-conversation / create_message
+    Note over App,API: TTFR (ms)
+    API-->>App: conversation_id / message_id
+    Note over App: first_response_at
+    loop Poll every poll_interval
+        App->>API: GET message status
+        API-->>App: status
+    end
+    Note over App,API: Polling (ms)
+    Note over App: completed_at
+    Note over App,API: Latency (ms) = TTFR + Polling
 ```
 
 - **TTFR** = `first_response_at - started_at` — time for the Genie API to accept the request and return a conversation/message ID.

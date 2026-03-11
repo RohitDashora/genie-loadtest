@@ -2,6 +2,8 @@
 
 A Databricks App for benchmarking [Genie API](https://docs.databricks.com/en/genie/index.html) concurrency and latency. Simulate virtual users sending questions to a Genie Space and get detailed performance metrics in real-time.
 
+![Overview — metrics, throughput, and concurrency curve](docs/images/overview.png)
+
 ## Why Use This
 
 When rolling out AI/BI Genie Spaces to your organization, you need to understand how they perform under load. This tool answers questions like:
@@ -93,6 +95,8 @@ You can also find it on the Genie Space settings page under **Space details**.
 
 ### Running a Test
 
+![Configuration panel with help tooltips](docs/images/config.png)
+
 1. **Open the app** and enter a Genie Space ID
 2. **Add questions** to the question bank (single or bulk import, one per line)
 3. **Configure the test:**
@@ -122,6 +126,10 @@ You can also find it on the Genie Space settings page under **Space details**.
 | **Retry Count** | How many times a request was retried due to HTTP 429 (rate limit) | High retries mean the Space is hitting API rate limits, not that questions are slow |
 | **Backoff Time** | Total time spent waiting between retries | Tracked separately from latency — a request with 10s backoff and 5s latency shows `latency_ms = 5000` |
 
+![Latency percentiles by request type](docs/images/percentiles.png)
+
+![Latency scatter plot over time](docs/images/latency-scatter.png)
+
 ### How to Use Each Tab
 
 - **Overview** — Start here. If P90 is 3x the P50, you have a long tail worth investigating in the per-question view.
@@ -131,6 +139,8 @@ You can also find it on the Genie Space settings page under **Space details**.
 - **Per Question** — The most actionable tab. Questions with P90 latency 3x+ above average are candidates for Genie instruction tuning (add examples, simplify scope, or refine table instructions).
 
 ### Comparing Runs
+
+![Run comparison — config table and percentile chart](docs/images/compare.png)
 
 Use the History tab to check 2+ runs and click **Compare**. Common patterns:
 
@@ -142,15 +152,16 @@ Use the History tab to check 2+ runs and click **Compare**. Common patterns:
 
 See [docs/architecture.md](docs/architecture.md) for a detailed technical overview with diagrams.
 
-```
-React/Vite UI  ──REST──>  FastAPI Backend  ──REST+poll──>  Genie API
-     ^                          |                          (Databricks)
-     |  SSE (live updates)      |
-     <──────────────────────────+
-                                |
-                                v
-                          Lakebase (Postgres)
-                          (test runs, requests, questions)
+```mermaid
+flowchart LR
+    subgraph app [Databricks App]
+        FE["React/Vite UI"]
+        BE["FastAPI Backend"]
+    end
+    FE -->|"REST"| BE
+    BE -->|"SSE stream"| FE
+    BE -->|"REST + poll"| Genie["Genie API"]
+    BE -->|"OAuth + SQL"| LB["Lakebase (Postgres)"]
 ```
 
 ## Project Structure
