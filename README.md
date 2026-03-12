@@ -19,7 +19,7 @@ When rolling out AI/BI Genie Spaces to your organization, you need to understand
 - **Real-time monitoring** — Live latency chart and progress via Server-Sent Events
 - **Detailed metrics** — Latency percentiles (P30-P99), standard deviation, TTFR vs polling breakdown, throughput, error analysis
 - **Concurrency curve** — Visualize how latency changes over the course of a test (10-second time buckets)
-- **Response type classification** — Detect whether Genie returned SQL, a clarification, or a refusal
+- **Per-request status tracking** — Genie API completion status recorded for every request
 - **Question bank** — Manage reusable question sets per Genie Space (single or bulk import)
 - **Configurable retry & polling** — Tune max retries, exponential backoff, poll interval, and poll timeout per test
 - **Run history** — Side-panel layout with full config display, persistent run list, and detail view

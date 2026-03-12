@@ -366,8 +366,7 @@ def get_run_results(run_id: str):
                 ROUND(MAX(latency_ms)::numeric, 1) as max_ms,
                 ROUND(AVG(ttfr_ms)::numeric, 1) as avg_ttfr_ms,
                 ROUND(AVG(polling_ms)::numeric, 1) as avg_polling_ms,
-                SUM(COALESCE(retry_count, 0)) as total_retries,
-                MODE() WITHIN GROUP (ORDER BY response_type) as response_type
+                SUM(COALESCE(retry_count, 0)) as total_retries
             FROM test_requests
             WHERE run_id = %s AND latency_ms IS NOT NULL
             GROUP BY question

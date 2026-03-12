@@ -117,8 +117,7 @@ Handles communication with the Databricks Genie API:
   - Formula: `base_delay * (2 ^ attempt)` (ignores server Retry-After header)
   - Default: 2s, 4s, 8s, 16s, 32s
 - **Polling:** Configurable poll interval (default 2s) and timeout (default 300s), both tunable per-run via the UI
-- **Response type detection:** Classifies Genie responses as `sql` (query attachment), `clarification` (text response), `refusal` (sorry/cannot), or `error`
-- **Metrics tracked:** start_time, first_response_time, completed_time, retry_count, backoff_time_ms, response_type
+- **Metrics tracked:** start_time, first_response_time, completed_time, retry_count, backoff_time_ms, response_type (Genie API status pass-through)
 
 #### `db.py` — Database Layer
 
@@ -432,4 +431,4 @@ PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY latency_ms)
 
 7. **Configurable polling per-run:** Poll interval and timeout are stored with each test run, allowing users to tune responsiveness vs API load. Lower poll intervals detect completion faster but generate more GET requests. All config is persisted to Lakebase so historical runs retain their full configuration for comparison.
 
-8. **Response type classification:** The Genie poll response is inspected for attachments (query = SQL) and content keywords (sorry/cannot = refusal) to classify each response, surfacing not just "which questions are slow" but "which questions are slow AND wrong."
+8. **Status pass-through:** The Genie API completion status (`completed`, `failed`, `cancelled`, `expired`) is recorded per-request as-is, without interpretation. This is a latency tester, not a correctness checker — the status is tracked for filtering and diagnostics, not for classifying response quality.

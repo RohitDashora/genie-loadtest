@@ -108,10 +108,8 @@ export default function PerQuestionTable({ perQuestion }) {
                   <td className="p-2">
                     {q.response_type && (
                       <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                        q.response_type === 'sql' ? 'bg-emerald-500/20 text-emerald-400' :
-                        q.response_type === 'clarification' ? 'bg-yellow-500/20 text-yellow-400' :
-                        q.response_type === 'refusal' ? 'bg-red-500/20 text-red-400' :
-                        'bg-gray-500/20 text-gray-400'
+                        q.response_type === 'completed' ? 'bg-emerald-500/20 text-emerald-400' :
+                        'bg-red-500/20 text-red-400'
                       }`}>{q.response_type}</span>
                     )}
                   </td>

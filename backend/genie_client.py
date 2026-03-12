@@ -144,19 +144,7 @@ class GenieClient:
                             error = data.get("error", {}).get(
                                 "message", f"Message {status}"
                             )
-                        response_type = "unknown"
-                        if status == "COMPLETED":
-                            attachments = data.get("attachments", [])
-                            if any("query" in a.get("type", "") for a in attachments):
-                                response_type = "sql"
-                            else:
-                                content = data.get("content", "").lower()
-                                if any(w in content for w in ("don't", "cannot", "sorry", "unable")):
-                                    response_type = "refusal"
-                                elif content:
-                                    response_type = "clarification"
-                        else:
-                            response_type = "error"
+                        response_type = status.lower()
                         return {
                             "completed_time": time.time(),
                             "status": status.lower(),
