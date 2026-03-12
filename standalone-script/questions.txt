@@ -1,0 +1,24 @@
+# Sample questions for Genie Load Testing
+# Replace these with questions relevant to your Genie Space.
+# One question per line. Blank lines and lines starting with # are ignored.
+
+Which campaigns had the highest CTR in the last 30 days?
+What is click-through CVR% by landing page for the last 30 days?
+Show daily click-through CVR% (conversions per click) for the last 30 days.
+What is CPA (all campaigns) by campaign for the last 30 days?
+What is the total ad spend by campaign in the last 30 days?
+Which creative had the most conversions in the past month?
+What is the average landing page load time by device type for valid clicks?
+How many valid impressions were served by country in the last week?
+What is the ROAS by campaign for the last 30 days?
+What is the view-through conversion rate by publisher for the last 30 days?
+How many billable clicks did each campaign have in the last 30 days?
+What is the eCPM by placement for the last month?
+What is the distribution of fraud scores for clicks in the last 30 days?
+Which campaigns had the highest conversion revenue in the last 30 days?
+What is the breakdown of conversion types by campaign for the last month?
+How many test impressions were recorded in the last 7 days?
+What is the average time to conversion (hours) for click-through conversions?
+What is the percentage of viewable impressions by device type?
+What is the daily trend of valid clicks for the last 30 days?
+Which campaigns had the most invalid conversions in the last month?

@@ -81,6 +81,24 @@ The script:
 ./deploy.sh my-genie-tester my-profile
 ```
 
+## Standalone Script (No Lakebase Required)
+
+If you can't deploy the full app — no Lakebase, no Databricks App platform, or you just want a quick CLI test — use the standalone Python script instead. It runs from any machine with Python and a valid Databricks CLI profile, producing CSV results with the same metrics.
+
+```bash
+cd standalone-script
+python3 -m venv venv && source venv/bin/activate
+pip install databricks-sdk httpx
+
+python genie_loadtest_cli.py \
+  --space-id 01ef1234-abcd-5678-... \
+  --questions questions.txt \
+  --profile my-profile \
+  --users 10
+```
+
+A sample `questions.txt` is included in the folder. You get CSV output (per-request data + aggregated summary) and a console report with percentiles, throughput, and per-question breakdown. You lose the live web UI, run history, and visual run comparison. See [standalone-script/README.md](standalone-script/README.md) for full documentation.
+
 ## Usage
 
 ### Finding Your Genie Space ID
@@ -185,6 +203,10 @@ genie-loadtest/
 │   │   └── utils/api.js     # API client + SSE helper
 │   ├── package.json
 │   └── vite.config.js
+├── standalone-script/
+│   ├── genie_loadtest_cli.py  # Single-file CLI (no Lakebase needed)
+│   ├── questions.txt          # Sample questions file
+│   └── README.md              # Standalone script documentation
 └── docs/
     ├── setup.md             # Complete setup guide
     └── architecture.md      # Technical architecture doc
@@ -288,6 +310,7 @@ Deletes the run and all its request data (cascading). Response: `{ "status": "de
 - **Database:** Lakebase (Databricks managed Postgres 16)
 - **Auth:** Databricks SDK OAuth (auto-refreshing tokens)
 - **Genie API:** start-conversation + create_message with polling
+- **Standalone CLI:** Single-file Python script (databricks-sdk + httpx only) — see [standalone-script/](standalone-script/)
 
 ## Known Limitations
 

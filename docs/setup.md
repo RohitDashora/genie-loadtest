@@ -2,6 +2,10 @@
 
 Deploy the Genie Throughput Tester on any Databricks workspace in 6 steps.
 
+## Lightweight Alternative
+
+> **Don't need the full web UI?** The [standalone CLI script](../standalone-script/README.md) runs load tests with just `pip install databricks-sdk httpx` and a `~/.databrickscfg` profile. No Lakebase, no App deployment, no Node.js — one Python file, CSV output.
+
 ## Prerequisites
 
 | Requirement | Version | Check |

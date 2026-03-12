@@ -415,6 +415,56 @@ PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY latency_ms)
 - **Duration** = `MAX(completed_at) - MIN(started_at)` across all requests in the run
 - **Success rate** = `successful / total_requests`
 
+## Standalone Script Alternative
+
+For environments without Lakebase or Databricks App platform access, a standalone single-file CLI (`standalone-script/genie_loadtest_cli.py`) provides the same load testing core with no infrastructure dependencies.
+
+### Standalone Architecture
+
+```mermaid
+flowchart LR
+    subgraph CLI["genie_loadtest_cli.py"]
+        Args["argparse CLI"]
+        QFile["Question Loader\n(text file)"]
+        subgraph Engine["asyncio Orchestrator"]
+            VU0["VUser 0"]
+            VU1["VUser 1"]
+            VUN["VUser N"]
+        end
+        GC["GenieClient\n(httpx + retry)"]
+        Analytics["Python Analytics\n(statistics module)"]
+    end
+
+    GenieAPI["Genie API"]
+    CSV["CSV Files"]
+
+    Args --> Engine
+    QFile --> Engine
+    Engine --> GC
+    GC -->|"start-conversation\ncreate_message\npoll"| GenieAPI
+    Engine -->|"in-memory results"| Analytics
+    Analytics --> CSV
+```
+
+### What's Reused vs Replaced
+
+| Component | Full App | Standalone Script |
+|-----------|----------|------------------|
+| Genie API client | `genie_client.py` — `WorkspaceClient()` | Same logic — `WorkspaceClient(profile=...)` |
+| Virtual user orchestration | `test_engine.py` — asyncio tasks with stagger | Same logic — no DB writes, results in memory |
+| Question source | `question_bank` table in Lakebase | Text file (one question per line) |
+| Result storage | `test_requests` table in Lakebase | In-memory list, written to CSV |
+| Analytics | SQL `PERCENTILE_CONT()`, aggregations in Postgres | Python `statistics` module (stdlib) |
+| Auth | SDK default auth chain + Lakebase OAuth | `--profile` flag reading `~/.databrickscfg` |
+| Live monitoring | SSE stream + React charts | Console progress bar on stderr |
+| Run history | Persistent in Lakebase, compare in UI | One run at a time, CSV files on disk |
+
+### Dependencies
+
+The standalone script requires only two packages (`databricks-sdk`, `httpx`) versus the full app's stack of FastAPI, psycopg, React, Vite, Tailwind, and a Lakebase instance.
+
+See [standalone-script/README.md](../standalone-script/README.md) for usage and CLI reference.
+
 ## Key Design Decisions
 
 1. **Exponential backoff (not server Retry-After):** Genie returns `Retry-After: 60` which is too conservative for load testing. We use our own `base_delay * 2^attempt` so backoff is configurable per run and allows faster recovery.

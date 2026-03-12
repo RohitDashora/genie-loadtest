@@ -9,6 +9,12 @@ frontend/dist/
 __pycache__/
 *.pyc
 .venv/
+venv/
+
+# Standalone script outputs
+standalone-script/venv/
+standalone-script/*_requests.csv
+standalone-script/*_summary.csv
 
 # Databricks
 .databricks/
